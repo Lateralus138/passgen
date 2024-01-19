@@ -1,0 +1,15 @@
+passgen_list=(
+  -? -h --help
+  -l --length
+  -c --compatible
+  -e --extended
+  -f --full
+  -uc --uppercase
+  -lc --lowercase
+  -d --digits
+  -sc --specialcompatible
+  -se --specialextended
+  -sf --specialfull
+)
+complete -W "$(printf '%s\n' "${passgen_list[@]}")" passgen
+

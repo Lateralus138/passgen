@@ -1,0 +1,141 @@
+name: Build Hex To Dec
+on:
+  push:
+    paths:
+      - '**.cpp'
+      - '**.h'
+      - '**.o'
+      - '**.sln'
+      - '**.yml'
+      - '*.yml'
+      - '**.ps1'
+env:
+  VS_PROGRAM: 1
+  VS_FILE: 0
+  VS_BUGFIX: 0
+  VS_EPOCH:
+  VS_FULL:
+  RELEASE_TITLE: "Password Generator"
+  RELEASE_FILE: "./docs/md/pre-release.md"
+  BIN_DEFAULT: "passgen"
+  PRERELEASE: False
+  GH_TOKEN: ${{ github.token }}
+jobs:
+  build_windows:
+    name: Build Windows Project
+    runs-on: windows-latest
+    steps:
+    - name: Checkout Windows
+      uses: actions/checkout@v3
+    - name: MSBuild Setup
+      uses: microsoft/setup-msbuild@v1.3.1
+    - name: Build Windows
+      id: make_windows_passgen
+      run: |
+        cd scripts
+        .\buildwindows.ps1
+        if ($LASTEXITCODE -gt 0)
+        {
+          Write-Host "[$LASTEXITCODE] - Error in build script."
+          Exit $LASTEXITCODE
+        }
+        cd ../../
+        $epoch = [decimal] [datetimeoffset]::UtcNow.ToUnixTimeMilliseconds()
+        echo "VS_FULL=${{ env.VS_PROGRAM }}.${{ env.VS_FILE }}.${{ env.VS_BUGFIX }}.$epoch" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
+        echo "${{ env.VS_PROGRAM }}.${{ env.VS_FILE }}.${{ env.VS_BUGFIX }}.$epoch" | Out-File -FilePath .\docs\latest_tag_name.txt
+        $passgen_x86_md5_text = @'
+        {
+          "schemaVersion": 1,
+          "color": "2E9778",
+          "label": "passgen-x86.exe MD5",
+          "message": "PLACEHOLDER",
+          "labelColor": "1d1d1d",
+          "style": "for-the-badge",
+          "namedLogo": "windows"
+        }
+        '@
+        New-Item -ItemType Directory -Force -Path '.\docs\json'
+        Write-Output "$passgen_x86_md5_text" > .\docs\json\passgen_x86_md5.json
+        $file = ".\docs\json\passgen_x86_md5.json"
+        $md5 = New-Object -TypeName System.Security.Cryptography.MD5CryptoServiceProvider
+        $(Get-FileHash -Path "build\windows\x86\passgen-x86.exe" -Algorithm MD5).Hash
+        $hash = $(Get-FileHash -Path "build\windows\x86\passgen-x86.exe" -Algorithm MD5).Hash
+        ((Get-Content -path $file -Raw) -replace 'PLACEHOLDER',$hash) | Set-Content -Path "$file"
+        $passgen_x64_md5_text = @'
+        {
+          "schemaVersion": 1,
+          "color": "2E9778",
+          "label": "passgen-x64.exe MD5",
+          "message": "PLACEHOLDER",
+          "labelColor": "1d1d1d",
+          "style": "for-the-badge",
+          "namedLogo": "windows"
+        }
+        '@
+        Write-Output "$passgen_x64_md5_text" > .\docs\json\passgen_x64_md5.json
+        $file = ".\docs\json\passgen_x64_md5.json"
+        $md5 = New-Object -TypeName System.Security.Cryptography.MD5CryptoServiceProvider
+        $hash = $(Get-FileHash -Path "build\windows\x64\passgen-x64.exe" -Algorithm MD5).Hash
+        ((Get-Content -path $file -Raw) -replace 'PLACEHOLDER',$hash) | Set-Content -Path "$file"
+        git add .\docs\json\* .\docs\latest_tag_name.txt
+        git config --global user.name 'Lateralus138'
+        git config --global user.email 'Lateralus138@users.noreply.github.com'
+        git commit --allow-empty -am "Pushed .\docs\json\* to master. - $(Get-Date ([datetime]::UtcNow)) UTC"
+        git push --force origin master
+    - name: Release Windows
+      uses: ncipollo/release-action@v1
+      with:
+        allowUpdates: True
+        tag: ${{ env.VS_FULL }}
+        name: ${{ env.RELEASE_TITLE }} - v${{ env.VS_FULL }}
+        bodyFile: ${{ env.RELEASE_FILE }}
+        prerelease: ${{ env.PRERELEASE }}
+        artifacts: build\windows\x86\${{ env.BIN_DEFAULT }}-x86.exe,build\windows\x64\${{ env.BIN_DEFAULT }}-x64.exe
+        token: ${{ secrets.GITHUB_TOKEN }}
+  build_linux:
+    name: Build Linux Project
+    runs-on: ubuntu-latest
+    needs: [build_windows]
+    steps:
+    - name: Checkout Linux
+      uses: actions/checkout@v3
+    - name: Build Linux
+      id: make_linux_passgen
+      run: |
+        git config --global user.name 'Lateralus138' || exit 255
+        git config --global user.email 'Lateralus138@users.noreply.github.com' || exit 254
+        git fetch || exit 253
+        git checkout FETCH_HEAD -- docs/latest_tag_name.txt || exit 252
+        echo "VS_FULL=$(cat docs/latest_tag_name.txt)" >> $GITHUB_ENV
+        version="$(cat docs/latest_tag_name.txt)"
+        version="$(echo $version | tr -d '\r')"
+        cd src/linux || exit 251
+        chmod u+x prebuild || exit 250
+        make || exit 249
+        if [[ -f "release/dynamic/passgen" ]]; then
+          MESSAGEL="{\n\t\"schemaVersion\": 1,\n\t\"color\": \"2E9778\",\n\t\"label\": \"passgen MD5\",\n\t\"message\": \"PLACEHOLDER\",\n\t\"labelColor\": \"1d1d1d\",\n\t\"style\": \"for-the-badge\",\n\t\"namedLogo\": \"linux\"\n}"
+          MD5L=($(md5sum release/dynamic/passgen))
+          MESSAGEL="${MESSAGEL//PLACEHOLDER/${MD5L}}"
+          cd ../../ || exit 247
+          echo -e "$MESSAGEL" > ./docs/json/passgen_linux_md5.json || exit 246
+          git add ./docs/json/passgen_linux_md5.json || exit 245
+          git commit --allow-empty -am "Pushed ./docs/json/passgen_linux_md5.json to master. - $(date -u)" || exit 244
+          git push --force origin master || exit 243
+          gh release upload "$version" src/linux/release/dynamic/passgen || exit 242
+        else
+          exit 248
+        fi
+        cd src/linux || exit 241
+        chmod 0755 release/dynamic/passgen || exit 240
+        mkdir debian/usr/bin || exit 239
+        cp release/dynamic/passgen debian/usr/bin || exit 238
+        dpkg-deb --root-owner-group --build debian passgen-1.0.0.deb || exit 237
+        MESSAGED="{\n\t\"schemaVersion\": 1,\n\t\"color\": \"2E9778\",\n\t\"label\": \"passgen-1.0.0.deb MD5\",\n\t\"message\": \"PLACEHOLDER\",\n\t\"labelColor\": \"1d1d1d\",\n\t\"style\": \"for-the-badge\",\n\t\"namedLogo\": \"debian\"\n}"
+        MD5D=($(md5sum passgen-1.0.0.deb))
+        MESSAGED="${MESSAGED//PLACEHOLDER/${MD5D}}"
+        cd ../../ || exit 236
+        echo -e "$MESSAGED" > ./docs/json/passgen_debian_md5.json || exit 235
+        git add ./docs/json/passgen_debian_md5.json || exit 234
+        git commit --allow-empty -am "Pushed ./docs/json/passgen_debian_md5.json to master. - $(date -u)" || exit 233
+        git push --force origin master || exit 232
+        gh release upload "$version" src/linux/passgen-1.0.0.deb || exit 231

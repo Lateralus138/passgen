@@ -1,0 +1,17 @@
+Source: passgen
+Package: passgen
+Section: utils
+Priority: optional
+Maintainer: Ian Pride <faithnomoread@yahoo.com>
+Homepage: https://github.com/Lateralus138/passgen
+Version: 1.0.0.0
+Installed-Size: 148
+Architecture: amd64
+Depends: libc6
+Description: Generate strong random passwords with various options.
+ The default password style consists of uppercase, lowercase, digits, and
+ a few basic compatible special characters that work in most cases. This
+ program provides additional switches to allow an extended or full list of
+ special characters. You can also specify the use of only one type of
+ character and-or digit and mix and match.
+
