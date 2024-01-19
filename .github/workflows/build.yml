@@ -77,7 +77,8 @@ jobs:
         $md5 = New-Object -TypeName System.Security.Cryptography.MD5CryptoServiceProvider
         $hash = $(Get-FileHash -Path "build\windows\x64\passgen-x64.exe" -Algorithm MD5).Hash
         ((Get-Content -path $file -Raw) -replace 'PLACEHOLDER',$hash) | Set-Content -Path "$file"
-        git add .\docs\json\* .\docs\latest_tag_name.txt
+        git add .\docs\json\*
+        git add  .\docs\latest_tag_name.txt
         git config --global user.name 'Lateralus138'
         git config --global user.email 'Lateralus138@users.noreply.github.com'
         git commit --allow-empty -am "Pushed .\docs\json\* to master. - $(Get-Date ([datetime]::UtcNow)) UTC"
